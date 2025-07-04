@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cute Chat 💕</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase App & Firestore via CDN -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+</head>
+<body class="flex flex-col h-screen bg-pink-50">
+  <header class="bg-pink-300 p-4 flex items-center justify-between text-white">
+    <h1 class="text-2xl font-bold text-center flex-1">Cute Chat 💕</h1>
+    <button
+      id="clear-chat-btn"
+      class="ml-4 bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm"
+    >
+      Clear All
+    </button>
+  </header>
+  <div id="chat-window" class="flex-1 overflow-y-auto p-4"></div>
+  <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
+    <input id="chat-input"
+           class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
+           placeholder="Type your message…"/>
+    <button type="submit"
+            class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
+      Send
+    </button>
+  </form>
+
+  <script>
+    // --- 1) Initialize Firebase ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyA_LU2HJW9ppDRynAdDzoElD7B0h4YrC-M",
+      authDomain: "chat-linh-tinh.firebaseapp.com",
+      projectId: "chat-linh-tinh",
+      storageBucket: "chat-linh-tinh.firebasestorage.app",
+      messagingSenderId: "942886320131",
+      appId: "1:942886320131:web:48a40f121339205eeaf636",
+      measurementId: "G-18EQZM2TY5"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // --- 2) Ask for your name once ---
+    let user;
+    while (true) {
+        user = prompt("Em iu tên gì zợ?");
+        if (user === "Tún" || user === "Linh") break;
+        alert("Xin lỗi, Tún chỉ chat với em iu Linh thui😒"); 
+    }
+    // --- 3) Send message helper ---
+    async function sendMessage(text) {
+      await db.collection("messages").add({
+        text,
+        user,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // --- 4) Clear‐all helper ---
+    async function clearChat() {
+      if (!confirm("Are you sure you want to delete every message?")) return;
+      const snapshot = await db.collection("messages").get();
+      const batch = db.batch();
+      snapshot.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+    }
+    document
+      .getElementById("clear-chat-btn")
+      .addEventListener("click", clearChat);
+
+    // --- 5) Listen for new messages ---
+    const chatWindow = document.getElementById("chat-window");
+    db.collection("messages")
+      .orderBy("createdAt", "asc")
+      .onSnapshot(snap => {
+        chatWindow.innerHTML = "";
+        snap.forEach(doc => {
+          const { text, user: u } = doc.data();
+          const side = u === user ? "justify-end" : "justify-start";
+          const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
+          const msg = document.createElement("div");
+          msg.className = `my-2 flex ${side}`;
+          msg.innerHTML = `
+            <div class="max-w-xs p-3 rounded-2xl ${bg}">
+              <span class="text-sm font-medium">${u}</span>
+              <p class="mt-1">${text}</p>
+            </div>`;
+          chatWindow.appendChild(msg);
+        });
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      });
+
+    // --- 6) Hook up the form ---
+    document
+      .getElementById("chat-form")
+      .addEventListener("submit", e => {
+        e.preventDefault();
+        const input = document.getElementById("chat-input");
+        if (input.value.trim()) {
+          sendMessage(input.value.trim());
+          input.value = "";
+        }
+      });
+  </script>
+</body>
+</html>
