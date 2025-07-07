@@ -8,7 +8,7 @@
   <!-- Firebase App & Firestore via CDN -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <!-- Emoji picker (UMD build) -->
+  <!-- ① Emoji picker (UMD build) -->
   <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.umd.js"></script>
 </head>
 <body class="flex flex-col h-screen bg-pink-50">
@@ -23,13 +23,11 @@
   </header>
 
   <div id="chat-window" class="flex-1 overflow-y-auto p-4"></div>
-  <!-- Typing indicator below the messages -->
   <div id="typing-indicator" class="px-4 text-gray-600 text-sm h-6"></div>
 
   <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
-    <!-- 1) Emoji picker trigger -->
+    <!-- ② Emoji button trigger -->
     <button id="emoji-btn" type="button" class="mr-2 text-2xl focus:outline-none">😊</button>
-    <!-- 2) Existing message input -->
     <input
       id="chat-input"
       class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
@@ -67,7 +65,7 @@
       alert("Sorry, only Tún or Linh can chat here!");
     }
 
-    // 3) Prepare typing‐status document
+    // 3) Prepare typing-status document
     const typingRef = db.collection("status").doc("typing");
     typingRef.set({ [user]: false }, { merge: true });
 
@@ -77,9 +75,7 @@
     chatInput.addEventListener("input", () => {
       typingRef.set({ [user]: true }, { merge: true });
       clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        typingRef.update({ [user]: false });
-      }, 1000);
+      typingTimeout = setTimeout(() => typingRef.update({ [user]: false }), 1000);
     });
     typingRef.onSnapshot(doc => {
       const data = doc.data() || {};
@@ -88,9 +84,9 @@
         data[other] ? "Typing…" : "";
     });
 
-    // 5) Emoji‐picker setup
-    //    (must use UMD build so EmojiButton is defined)
-    const picker = new EmojiButton({ position: 'top-end', zIndex: 10000 });
+    // 5) Emoji-picker setup
+    //    (using the UMD build loaded above)
+    const picker = new EmojiButton({ position: 'top-end' });
     picker.on('emoji', emoji => {
       const start = chatInput.selectionStart;
       const end   = chatInput.selectionEnd;
@@ -157,7 +153,7 @@
 
           // determine bubble style
           const side = u === user ? "justify-end" : "justify-start";
-          const bg = u === user ? "bg-pink-200" : "bg-white shadow";
+          const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
 
           const other = user === "Tún" ? "Linh" : "Tún";
           const seenIndicator =
