@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="UTF-8" />
   <title>Cute Chat 💕</title>
@@ -19,13 +19,19 @@
       Clear All
     </button>
   </header>
+
   <div id="chat-window" class="flex-1 overflow-y-auto p-4"></div>
+
   <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
-    <input id="chat-input"
-           class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
-           placeholder="Type your message…"/>
-    <button type="submit"
-            class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
+    <input
+      id="chat-input"
+      class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
+      placeholder="Type your message…"
+    />
+    <button
+      type="submit"
+      class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold"
+    >
       Send
     </button>
   </form>
@@ -44,13 +50,14 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // --- 2) Ask for your name once ---
+    // --- 2) Ask for your name (only Tún or Linh allowed) ---
     let user;
     while (true) {
-        user = prompt("Em iu tên gì zợ?");
-        if (user === "Tún" || user === "Linh") break;
-        alert("Xin lỗi, Tún chỉ chat với em iu Linh thui😒"); 
+      user = prompt("Em iu tên gì zợ?");
+      if (user === "Tún" || user === "Linh") break;
+      alert("Xin lỗi, Tún chỉ chat với em iu Linh thui😒"); 
     }
+
     // --- 3) Send message helper ---
     async function sendMessage(text) {
       await db.collection("messages").add({
@@ -72,21 +79,33 @@
       .getElementById("clear-chat-btn")
       .addEventListener("click", clearChat);
 
-    // --- 5) Listen for new messages ---
+    // --- 5) Listen for new messages & render with timestamps ---
     const chatWindow = document.getElementById("chat-window");
     db.collection("messages")
       .orderBy("createdAt", "asc")
       .onSnapshot(snap => {
         chatWindow.innerHTML = "";
         snap.forEach(doc => {
-          const { text, user: u } = doc.data();
+          const { text, user: u, createdAt } = doc.data();
+
+          // convert Firestore Timestamp → JS Date
+          const date = createdAt ? createdAt.toDate() : new Date();
+          // format as "HH:MM" in Vietnamese locale
+          const timeString = date.toLocaleTimeString('vi-VN', {
+            hour:   '2-digit',
+            minute: '2-digit'
+          });
+
           const side = u === user ? "justify-end" : "justify-start";
           const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
           const msg = document.createElement("div");
           msg.className = `my-2 flex ${side}`;
           msg.innerHTML = `
             <div class="max-w-xs p-3 rounded-2xl ${bg}">
-              <span class="text-sm font-medium">${u}</span>
+              <div class="flex items-baseline justify-between">
+                <span class="text-sm font-medium">${u}</span>
+                <span class="text-xs text-gray-600 ml-2">${timeString}</span>
+              </div>
               <p class="mt-1">${text}</p>
             </div>`;
           chatWindow.appendChild(msg);
@@ -94,7 +113,7 @@
         chatWindow.scrollTop = chatWindow.scrollHeight;
       });
 
-    // --- 6) Hook up the form ---
+    // --- 6) Hook up the form submit ---
     document
       .getElementById("chat-form")
       .addEventListener("submit", e => {
