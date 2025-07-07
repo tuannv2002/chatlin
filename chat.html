@@ -4,20 +4,21 @@
   <meta charset="UTF-8" />
   <title>Cute Chat 💕</title>
 
-  <!-- Tailwind CSS (dev-only CDN warning is fine) -->
+  <!-- Tailwind CSS (dev CDN warning is fine) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Firebase -->
+  <!-- Firebase App & Firestore -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
-  <!-- **Correct** UMD build of EmojiButton (not the ESM version) -->
+  <!-- **UMD build** of EmojiButton—must load before your code below -->
   <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.umd.js"></script>
 </head>
 <body class="flex flex-col h-screen bg-pink-50">
   <header class="bg-pink-300 p-4 flex items-center justify-between text-white">
     <h1 class="text-2xl font-bold flex-1 text-center">Cute Chat 💕</h1>
-    <button id="clear-chat-btn" class="ml-4 bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm">
+    <button id="clear-chat-btn"
+            class="ml-4 bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm">
       Clear All
     </button>
   </header>
@@ -26,19 +27,26 @@
   <div id="typing-indicator" class="px-4 text-gray-600 text-sm h-6"></div>
 
   <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
+    <!-- emoji picker trigger must be type="button" -->
     <button id="emoji-btn" type="button" class="mr-2 text-2xl focus:outline-none">😊</button>
     <input id="chat-input"
            class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
-           placeholder="Type your message…"
-           autocomplete="off"/>
-    <button type="submit" class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
+           placeholder="Type your message…" autocomplete="off"/>
+    <button type="submit"
+            class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
       Send
     </button>
   </form>
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      // --- Firebase init ---
+      // 1) Quick check that EmojiButton is loaded
+      if (typeof EmojiButton !== 'function') {
+        console.error('EmojiButton is not defined—check your <script> tag for the UMD build.');
+        return;
+      }
+
+      // 2) Initialize Firebase
       const firebaseConfig = {
         apiKey: "AIzaSyA_LU2HJW9ppDRynAdDzoElD7B0h4YrC-M",
         authDomain: "chat-linh-tinh.firebaseapp.com",
@@ -52,7 +60,7 @@
       const db = firebase.firestore();
       const FieldValue = firebase.firestore.FieldValue;
 
-      // --- Name prompt ---
+      // 3) Prompt for name (only “Tún” or “Linh”)
       let user;
       while (true) {
         user = prompt("What is your name? (Only “Tún” or “Linh” allowed)");
@@ -60,9 +68,10 @@
         alert("Sorry, only Tún or Linh can chat here!");
       }
 
-      // --- Typing indicator setup ---
+      // 4) Typing indicator
       const typingRef = db.collection("status").doc("typing");
       typingRef.set({ [user]: false }, { merge: true });
+
       const chatInput = document.getElementById("chat-input");
       const typingIndicator = document.getElementById("typing-indicator");
       let typingTimeout;
@@ -72,27 +81,24 @@
         typingTimeout = setTimeout(() => typingRef.update({ [user]: false }), 1000);
       });
       typingRef.onSnapshot(doc => {
-        const data = doc.data()||{};
+        const data = doc.data() || {};
         const other = user === "Tún" ? "Linh" : "Tún";
         typingIndicator.textContent = data[other] ? "Typing…" : "";
       });
 
-      // --- Emoji picker setup ---
-      if (typeof EmojiButton !== "function") {
-        console.error("EmojiButton not loaded!");
-        return;
-      }
+      // 5) Emoji picker setup
       const picker = new EmojiButton({ position: 'top-end', zIndex: 10000 });
       picker.on('emoji', emoji => {
-        const start = chatInput.selectionStart, end = chatInput.selectionEnd;
-        chatInput.value = chatInput.value.slice(0,start) + emoji + chatInput.value.slice(end);
+        const start = chatInput.selectionStart;
+        const end   = chatInput.selectionEnd;
+        chatInput.value = chatInput.value.slice(0, start) + emoji + chatInput.value.slice(end);
         chatInput.selectionStart = chatInput.selectionEnd = start + emoji.length;
         chatInput.focus();
       });
       document.getElementById("emoji-btn")
               .addEventListener("click", () => picker.togglePicker(document.getElementById("emoji-btn")));
 
-      // --- Send helper ---
+      // 6) Send message helper
       async function sendMessage(text) {
         await db.collection("messages").add({
           text, user,
@@ -101,7 +107,7 @@
         });
       }
 
-      // --- Clear-all helper ---
+      // 7) Clear-all helper
       document.getElementById("clear-chat-btn")
               .addEventListener("click", async () => {
         if (!confirm("Delete every message?")) return;
@@ -111,7 +117,7 @@
         await batch.commit();
       });
 
-      // --- Render messages ---
+      // 8) Render messages
       const chatWindow = document.getElementById("chat-window");
       db.collection("messages")
         .orderBy("createdAt","asc")
@@ -119,16 +125,19 @@
           chatWindow.innerHTML = "";
           snap.forEach(doc => {
             const { text, user: u, createdAt, seenBy=[] } = doc.data();
-            if (u!==user && !seenBy.includes(user)) doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
+            // mark seen
+            if (u!==user && !seenBy.includes(user)) 
+              doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
 
+            // format DD/MM HH:MM
             const d = createdAt ? createdAt.toDate() : new Date();
             const date = d.toLocaleDateString("en-GB",{day:'2-digit',month:'2-digit'});
             const time = d.toLocaleTimeString("en-GB",{hour:'2-digit',minute:'2-digit'});
             const dateTime = `${date} ${time}`;
 
             const side = u===user ? "justify-end" : "justify-start";
-            const bg   = u===user ? "bg-pink-200"   : "bg-white shadow";
-            const other= user==="Tún" ? "Linh"       : "Tún";
+            const bg   = u===user ? "bg-pink-200" : "bg-white shadow";
+            const other= user==="Tún" ? "Linh"     : "Tún";
             const seen = (u===user && seenBy.includes(other))
                          ? `<span class="text-xs text-blue-500 ml-1">✓</span>` : "";
 
@@ -148,13 +157,13 @@
           chatWindow.scrollTop = chatWindow.scrollHeight;
         });
 
-      // --- Form submit handler ---
+      // 9) Form submit
       document.getElementById("chat-form")
               .addEventListener("submit", e => {
         e.preventDefault();
         const txt = chatInput.value.trim();
         if (!txt) return;
-        sendMessage(txt).then(()=> chatInput.value="");
+        sendMessage(txt).then(() => chatInput.value = "");
       });
     });
   </script>
