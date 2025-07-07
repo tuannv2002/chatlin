@@ -21,12 +21,15 @@
   </header>
 
   <div id="chat-window" class="flex-1 overflow-y-auto p-4"></div>
+  <!-- Typing indicator below the messages -->
+  <div id="typing-indicator" class="px-4 text-gray-600 text-sm h-6"></div>
 
   <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
     <input
       id="chat-input"
       class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
       placeholder="Type your message…"
+      autocomplete="off"
     />
     <button
       type="submit"
@@ -49,87 +52,132 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    const FieldValue = firebase.firestore.FieldValue;
 
     // 2) Prompt for your name (only “Tún” or “Linh” allowed)
     let user;
     while (true) {
       user = prompt("What is your name? (Only “Tún” or “Linh” allowed)");
       if (user === "Tún" || user === "Linh") break;
-      alert("Sorry, only Tún or Linh can chat here!"); 
+      alert("Sorry, only Tún or Linh can chat here!");
     }
 
-    // 3) Helper to send a message
+    // 3) Prepare typing-status document
+    const typingRef = db.collection("status").doc("typing");
+    // ensure our field exists
+    typingRef.set({ [user]: false }, { merge: true });
+
+    // 4) Handle “typing…” indicator
+    const chatInput = document.getElementById("chat-input");
+    let typingTimeout;
+    chatInput.addEventListener("input", () => {
+      // set our typing flag true
+      typingRef.set({ [user]: true }, { merge: true });
+      clearTimeout(typingTimeout);
+      // clear after 1s of no input
+      typingTimeout = setTimeout(() => {
+        typingRef.update({ [user]: false });
+      }, 1000);
+    });
+
+    // listen for other user typing
+    typingRef.onSnapshot(doc => {
+      const data = doc.data() || {};
+      const other = user === "Tún" ? "Linh" : "Tún";
+      const indicator = document.getElementById("typing-indicator");
+      if (data[other]) {
+        indicator.textContent = "Typing…";
+      } else {
+        indicator.textContent = "";
+      }
+    });
+
+    // 5) Helper to send a message
     async function sendMessage(text) {
       await db.collection("messages").add({
         text,
         user,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        createdAt: FieldValue.serverTimestamp(),
+        seenBy: []  // initialize empty
       });
     }
 
-    // 4) Helper to clear all messages
+    // 6) Helper to clear all messages
     async function clearChat() {
       if (!confirm("Are you sure you want to delete every message?")) return;
-      const snapshot = await db.collection("messages").get();
+      const snap = await db.collection("messages").get();
       const batch = db.batch();
-      snapshot.forEach(doc => batch.delete(doc.ref));
+      snap.forEach(doc => batch.delete(doc.ref));
       await batch.commit();
     }
-    document
-      .getElementById("clear-chat-btn")
+    document.getElementById("clear-chat-btn")
       .addEventListener("click", clearChat);
 
-    // 5) Listen for messages and render with DD/MM HH:MM
+    // 7) Listen for new messages & render with “seen” and date/time
     const chatWindow = document.getElementById("chat-window");
     db.collection("messages")
       .orderBy("createdAt", "asc")
-      .onSnapshot(snap => {
+      .onSnapshot(snapshot => {
         chatWindow.innerHTML = "";
-        snap.forEach(doc => {
-          const { text, user: u, createdAt } = doc.data();
 
-          // Convert Firestore Timestamp → JS Date
-          const date = createdAt ? createdAt.toDate() : new Date();
-          // Format day/month
-          const dateString = date.toLocaleDateString('en-GB', {
-            day:   '2-digit',
-            month: '2-digit'
-          });
-          // Format hour:minute
-          const timeString = date.toLocaleTimeString('en-GB', {
-            hour:   '2-digit',
-            minute: '2-digit'
-          });
-          const dateTimeString = `${dateString} ${timeString}`;
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const { text, user: u, createdAt, seenBy = [] } = data;
 
-          // Determine alignment and background
+          // mark messages from the other user as “seen”
+          if (u !== user && !seenBy.includes(user)) {
+            doc.ref.update({
+              seenBy: FieldValue.arrayUnion(user)
+            });
+          }
+
+          // build date/time label
+          const dateObj = createdAt ? createdAt.toDate() : new Date();
+          const dateString = dateObj.toLocaleDateString("en-GB", {
+            day: "2-digit", month: "2-digit"
+          });
+          const timeString = dateObj.toLocaleTimeString("en-GB", {
+            hour: "2-digit", minute: "2-digit"
+          });
+          const dateTime = `${dateString} ${timeString}`;
+
+          // determine bubble style
           const side = u === user ? "justify-end" : "justify-start";
-          const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
-          
-          // Build message bubble
-          const msg = document.createElement("div");
-          msg.className = `my-2 flex ${side}`;
-          msg.innerHTML = `
+          const bg = u === user ? "bg-pink-200" : "bg-white shadow";
+
+          // seen indicator for our own messages
+          const other = user === "Tún" ? "Linh" : "Tún";
+          const seenIndicator =
+            (u === user && seenBy.includes(other))
+              ? `<span class="text-xs text-blue-500 ml-1">✓</span>`
+              : "";
+
+          // render bubble
+          const msgEl = document.createElement("div");
+          msgEl.className = `my-2 flex ${side}`;
+          msgEl.innerHTML = `
             <div class="max-w-xs p-3 rounded-2xl ${bg}">
               <div class="flex items-baseline justify-between">
                 <span class="text-sm font-medium">${u}</span>
-                <span class="text-xs text-gray-600 ml-2">${dateTimeString}</span>
+                <span class="text-xs text-gray-600 ml-2">${dateTime}</span>
+                ${seenIndicator}
               </div>
               <p class="mt-1">${text}</p>
             </div>`;
-          chatWindow.appendChild(msg);
+          chatWindow.appendChild(msgEl);
         });
+
         chatWindow.scrollTop = chatWindow.scrollHeight;
       });
 
-    // 6) Hook up the form submission
-    document
-      .getElementById("chat-form")
+    // 8) Hook up the form submission
+    document.getElementById("chat-form")
       .addEventListener("submit", e => {
         e.preventDefault();
         const input = document.getElementById("chat-input");
-        if (input.value.trim()) {
-          sendMessage(input.value.trim());
+        const txt = input.value.trim();
+        if (txt) {
+          sendMessage(txt);
           input.value = "";
         }
       });
