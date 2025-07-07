@@ -62,47 +62,45 @@
       alert("Sorry, only Tún or Linh can chat here!");
     }
 
-    // 3) Prepare typing-status document
+    // 3) Ask for Notification permission
+    if ("Notification" in window) {
+      Notification.requestPermission().then(p => {
+        console.log("Notification permission:", p);
+      });
+    }
+
+    // 4) Prepare typing-status document
     const typingRef = db.collection("status").doc("typing");
-    // ensure our field exists
     typingRef.set({ [user]: false }, { merge: true });
 
-    // 4) Handle “typing…” indicator
+    // 5) Handle “typing…” indicator
     const chatInput = document.getElementById("chat-input");
     let typingTimeout;
     chatInput.addEventListener("input", () => {
-      // set our typing flag true
       typingRef.set({ [user]: true }, { merge: true });
       clearTimeout(typingTimeout);
-      // clear after 1s of no input
       typingTimeout = setTimeout(() => {
         typingRef.update({ [user]: false });
       }, 1000);
     });
-
-    // listen for other user typing
     typingRef.onSnapshot(doc => {
       const data = doc.data() || {};
       const other = user === "Tún" ? "Linh" : "Tún";
-      const indicator = document.getElementById("typing-indicator");
-      if (data[other]) {
-        indicator.textContent = "Typing…";
-      } else {
-        indicator.textContent = "";
-      }
+      document.getElementById("typing-indicator").textContent =
+        data[other] ? "Typing…" : "";
     });
 
-    // 5) Helper to send a message
+    // 6) Helper to send a message
     async function sendMessage(text) {
       await db.collection("messages").add({
         text,
         user,
         createdAt: FieldValue.serverTimestamp(),
-        seenBy: []  // initialize empty
+        seenBy: []
       });
     }
 
-    // 6) Helper to clear all messages
+    // 7) Helper to clear all messages
     async function clearChat() {
       if (!confirm("Are you sure you want to delete every message?")) return;
       const snap = await db.collection("messages").get();
@@ -113,25 +111,35 @@
     document.getElementById("clear-chat-btn")
       .addEventListener("click", clearChat);
 
-    // 7) Listen for new messages & render with “seen” and date/time
+    // 8) Listen for new messages, fire notifications, then render
     const chatWindow = document.getElementById("chat-window");
     db.collection("messages")
       .orderBy("createdAt", "asc")
       .onSnapshot(snapshot => {
+        // 8a) Fire a notification for each newly added message from the other user
+        snapshot.docChanges().forEach(change => {
+          if (change.type === "added") {
+            const { text, user: u } = change.doc.data();
+            if (u !== user && Notification.permission === "granted") {
+              new Notification(`${u} says:`, {
+                body: text.length > 50 ? text.slice(0, 47) + "…" : text
+                // icon: 'https://your.cdn.com/icons/chat-icon.png'
+              });
+            }
+          }
+        });
+
+        // 8b) Render all messages as before
         chatWindow.innerHTML = "";
-
         snapshot.forEach(doc => {
-          const data = doc.data();
-          const { text, user: u, createdAt, seenBy = [] } = data;
+          const { text, user: u, createdAt, seenBy = [] } = doc.data();
 
-          // mark messages from the other user as “seen”
+          // mark as seen
           if (u !== user && !seenBy.includes(user)) {
-            doc.ref.update({
-              seenBy: FieldValue.arrayUnion(user)
-            });
+            doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
           }
 
-          // build date/time label
+          // build date/time
           const dateObj = createdAt ? createdAt.toDate() : new Date();
           const dateString = dateObj.toLocaleDateString("en-GB", {
             day: "2-digit", month: "2-digit"
@@ -141,11 +149,11 @@
           });
           const dateTime = `${dateString} ${timeString}`;
 
-          // determine bubble style
+          // bubble style
           const side = u === user ? "justify-end" : "justify-start";
           const bg = u === user ? "bg-pink-200" : "bg-white shadow";
 
-          // seen indicator for our own messages
+          // seen indicator for my messages
           const other = user === "Tún" ? "Linh" : "Tún";
           const seenIndicator =
             (u === user && seenBy.includes(other))
@@ -166,19 +174,17 @@
             </div>`;
           chatWindow.appendChild(msgEl);
         });
-
         chatWindow.scrollTop = chatWindow.scrollHeight;
       });
 
-    // 8) Hook up the form submission
+    // 9) Hook up the form submission
     document.getElementById("chat-form")
       .addEventListener("submit", e => {
         e.preventDefault();
-        const input = document.getElementById("chat-input");
-        const txt = input.value.trim();
+        const txt = chatInput.value.trim();
         if (txt) {
           sendMessage(txt);
-          input.value = "";
+          chatInput.value = "";
         }
       });
   </script>
