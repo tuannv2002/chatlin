@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Cute Chat 💕</title>
@@ -37,7 +37,7 @@
   </form>
 
   <script>
-    // --- 1) Initialize Firebase ---
+    // 1) Initialize Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyA_LU2HJW9ppDRynAdDzoElD7B0h4YrC-M",
       authDomain: "chat-linh-tinh.firebaseapp.com",
@@ -50,15 +50,15 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // --- 2) Ask for your name (only Tún or Linh allowed) ---
+    // 2) Prompt for your name (only “Tún” or “Linh” allowed)
     let user;
     while (true) {
-      user = prompt("Em iu tên gì zợ?");
+      user = prompt("What is your name? (Only “Tún” or “Linh” allowed)");
       if (user === "Tún" || user === "Linh") break;
-      alert("Xin lỗi, Tún chỉ chat với em iu Linh thui😒"); 
+      alert("Sorry, only Tún or Linh can chat here!"); 
     }
 
-    // --- 3) Send message helper ---
+    // 3) Helper to send a message
     async function sendMessage(text) {
       await db.collection("messages").add({
         text,
@@ -67,7 +67,7 @@
       });
     }
 
-    // --- 4) Clear‐all helper ---
+    // 4) Helper to clear all messages
     async function clearChat() {
       if (!confirm("Are you sure you want to delete every message?")) return;
       const snapshot = await db.collection("messages").get();
@@ -79,7 +79,7 @@
       .getElementById("clear-chat-btn")
       .addEventListener("click", clearChat);
 
-    // --- 5) Listen for new messages & render with timestamps ---
+    // 5) Listen for messages and render with DD/MM HH:MM
     const chatWindow = document.getElementById("chat-window");
     db.collection("messages")
       .orderBy("createdAt", "asc")
@@ -88,23 +88,32 @@
         snap.forEach(doc => {
           const { text, user: u, createdAt } = doc.data();
 
-          // convert Firestore Timestamp → JS Date
+          // Convert Firestore Timestamp → JS Date
           const date = createdAt ? createdAt.toDate() : new Date();
-          // format as "HH:MM" in Vietnamese locale
-          const timeString = date.toLocaleTimeString('vi-VN', {
+          // Format day/month
+          const dateString = date.toLocaleDateString('en-GB', {
+            day:   '2-digit',
+            month: '2-digit'
+          });
+          // Format hour:minute
+          const timeString = date.toLocaleTimeString('en-GB', {
             hour:   '2-digit',
             minute: '2-digit'
           });
+          const dateTimeString = `${dateString} ${timeString}`;
 
+          // Determine alignment and background
           const side = u === user ? "justify-end" : "justify-start";
           const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
+          
+          // Build message bubble
           const msg = document.createElement("div");
           msg.className = `my-2 flex ${side}`;
           msg.innerHTML = `
             <div class="max-w-xs p-3 rounded-2xl ${bg}">
               <div class="flex items-baseline justify-between">
                 <span class="text-sm font-medium">${u}</span>
-                <span class="text-xs text-gray-600 ml-2">${timeString}</span>
+                <span class="text-xs text-gray-600 ml-2">${dateTimeString}</span>
               </div>
               <p class="mt-1">${text}</p>
             </div>`;
@@ -113,7 +122,7 @@
         chatWindow.scrollTop = chatWindow.scrollHeight;
       });
 
-    // --- 6) Hook up the form submit ---
+    // 6) Hook up the form submission
     document
       .getElementById("chat-form")
       .addEventListener("submit", e => {
