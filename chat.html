@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <title>Cute Chat 💕</title>
-  <!-- Tailwind CSS -->
+
+  <!-- Tailwind CSS (dev-only CDN warning is fine) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Firebase App & Firestore -->
+
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <!-- Emoji picker -->
-  <!-- right: UMD build -->
-  <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.umd.js"></script>
 
+  <!-- **Correct** UMD build of EmojiButton (not the ESM version) -->
+  <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.umd.js"></script>
 </head>
 <body class="flex flex-col h-screen bg-pink-50">
   <header class="bg-pink-300 p-4 flex items-center justify-between text-white">
@@ -26,8 +27,10 @@
 
   <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
     <button id="emoji-btn" type="button" class="mr-2 text-2xl focus:outline-none">😊</button>
-    <input id="chat-input" class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
-           placeholder="Type your message…" autocomplete="off"/>
+    <input id="chat-input"
+           class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
+           placeholder="Type your message…"
+           autocomplete="off"/>
     <button type="submit" class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
       Send
     </button>
@@ -35,7 +38,7 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      // 1) Firebase init
+      // --- Firebase init ---
       const firebaseConfig = {
         apiKey: "AIzaSyA_LU2HJW9ppDRynAdDzoElD7B0h4YrC-M",
         authDomain: "chat-linh-tinh.firebaseapp.com",
@@ -49,120 +52,110 @@
       const db = firebase.firestore();
       const FieldValue = firebase.firestore.FieldValue;
 
-      // 2) Name prompt
+      // --- Name prompt ---
       let user;
       while (true) {
         user = prompt("What is your name? (Only “Tún” or “Linh” allowed)");
         if (user === "Tún" || user === "Linh") break;
         alert("Sorry, only Tún or Linh can chat here!");
       }
-      console.log("Logged in as:", user);
 
-      // 3) Typing indicator setup
+      // --- Typing indicator setup ---
       const typingRef = db.collection("status").doc("typing");
       typingRef.set({ [user]: false }, { merge: true });
-
       const chatInput = document.getElementById("chat-input");
       const typingIndicator = document.getElementById("typing-indicator");
       let typingTimeout;
       chatInput.addEventListener("input", () => {
         typingRef.set({ [user]: true }, { merge: true });
         clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-          typingRef.update({ [user]: false });
-        }, 1000);
+        typingTimeout = setTimeout(() => typingRef.update({ [user]: false }), 1000);
       });
       typingRef.onSnapshot(doc => {
-        const data = doc.data() || {};
+        const data = doc.data()||{};
         const other = user === "Tún" ? "Linh" : "Tún";
         typingIndicator.textContent = data[other] ? "Typing…" : "";
       });
 
-      // 4) Emoji picker
+      // --- Emoji picker setup ---
+      if (typeof EmojiButton !== "function") {
+        console.error("EmojiButton not loaded!");
+        return;
+      }
       const picker = new EmojiButton({ position: 'top-end', zIndex: 10000 });
       picker.on('emoji', emoji => {
-        const start = chatInput.selectionStart;
-        const end   = chatInput.selectionEnd;
-        chatInput.value = chatInput.value.slice(0, start) + emoji + chatInput.value.slice(end);
+        const start = chatInput.selectionStart, end = chatInput.selectionEnd;
+        chatInput.value = chatInput.value.slice(0,start) + emoji + chatInput.value.slice(end);
         chatInput.selectionStart = chatInput.selectionEnd = start + emoji.length;
         chatInput.focus();
       });
       document.getElementById("emoji-btn")
-              .addEventListener('click', () => picker.togglePicker(document.getElementById("emoji-btn")));
+              .addEventListener("click", () => picker.togglePicker(document.getElementById("emoji-btn")));
 
-      // 5) Send helper
+      // --- Send helper ---
       async function sendMessage(text) {
-        console.log("Sending message:", text);
         await db.collection("messages").add({
-          text,
-          user,
+          text, user,
           createdAt: FieldValue.serverTimestamp(),
           seenBy: []
         });
       }
 
-      // 6) Clear chat
-      async function clearChat() {
-        if (!confirm("Are you sure you want to delete every message?")) return;
+      // --- Clear-all helper ---
+      document.getElementById("clear-chat-btn")
+              .addEventListener("click", async () => {
+        if (!confirm("Delete every message?")) return;
         const snap = await db.collection("messages").get();
         const batch = db.batch();
-        snap.forEach(doc => batch.delete(doc.ref));
+        snap.forEach(d => batch.delete(d.ref));
         await batch.commit();
-        console.log("Chat cleared");
-      }
-      document.getElementById("clear-chat-btn")
-              .addEventListener("click", clearChat);
+      });
 
-      // 7) Render messages
+      // --- Render messages ---
       const chatWindow = document.getElementById("chat-window");
       db.collection("messages")
-        .orderBy("createdAt", "asc")
-        .onSnapshot(snapshot => {
+        .orderBy("createdAt","asc")
+        .onSnapshot(snap => {
           chatWindow.innerHTML = "";
-          snapshot.forEach(doc => {
-            const { text, user: u, createdAt, seenBy = [] } = doc.data();
+          snap.forEach(doc => {
+            const { text, user: u, createdAt, seenBy=[] } = doc.data();
+            if (u!==user && !seenBy.includes(user)) doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
 
-            // mark seen
-            if (u !== user && !seenBy.includes(user)) {
-              doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
-            }
-
-            // time formatting
             const d = createdAt ? createdAt.toDate() : new Date();
-            const dateStr = d.toLocaleDateString("en-GB", { day:'2-digit', month:'2-digit' });
-            const timeStr = d.toLocaleTimeString("en-GB", { hour:'2-digit', minute:'2-digit' });
-            const dateTime = `${dateStr} ${timeStr}`;
+            const date = d.toLocaleDateString("en-GB",{day:'2-digit',month:'2-digit'});
+            const time = d.toLocaleTimeString("en-GB",{hour:'2-digit',minute:'2-digit'});
+            const dateTime = `${date} ${time}`;
 
-            const side = u === user ? "justify-end" : "justify-start";
-            const bg = u === user ? "bg-pink-200" : "bg-white shadow";
-            const other = user === "Tún" ? "Linh" : "Tún";
-            const seenIcon = (u===user && seenBy.includes(other)) ? `<span class="text-xs text-blue-500 ml-1">✓</span>` : "";
+            const side = u===user ? "justify-end" : "justify-start";
+            const bg   = u===user ? "bg-pink-200"   : "bg-white shadow";
+            const other= user==="Tún" ? "Linh"       : "Tún";
+            const seen = (u===user && seenBy.includes(other))
+                         ? `<span class="text-xs text-blue-500 ml-1">✓</span>` : "";
 
-            const msgEl = document.createElement("div");
-            msgEl.className = `my-2 flex ${side}`;
-            msgEl.innerHTML = `
+            const el = document.createElement("div");
+            el.className = `my-2 flex ${side}`;
+            el.innerHTML = `
               <div class="max-w-xs p-3 rounded-2xl ${bg}">
                 <div class="flex items-baseline justify-between">
                   <span class="text-sm font-medium">${u}</span>
                   <span class="text-xs text-gray-600 ml-2">${dateTime}</span>
-                  ${seenIcon}
+                  ${seen}
                 </div>
                 <p class="mt-1">${text}</p>
               </div>`;
-            chatWindow.appendChild(msgEl);
+            chatWindow.appendChild(el);
           });
           chatWindow.scrollTop = chatWindow.scrollHeight;
         });
 
-      // 8) Form submit
+      // --- Form submit handler ---
       document.getElementById("chat-form")
-        .addEventListener("submit", e => {
-          e.preventDefault();
-          const txt = chatInput.value.trim();
-          if (!txt) return;
-          sendMessage(txt).catch(err => console.error("Send failed:", err));
-          chatInput.value = "";
-        });
+              .addEventListener("submit", e => {
+        e.preventDefault();
+        const txt = chatInput.value.trim();
+        if (!txt) return;
+        sendMessage(txt).then(()=> chatInput.value="");
+      });
     });
   </script>
 </body>
