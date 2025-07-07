@@ -8,16 +8,14 @@
   <!-- Firebase App & Firestore via CDN -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <!-- Canvas-Confetti for bursts -->
+  <!-- Canvas-Confetti for the burst -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 </head>
 <body class="flex flex-col h-screen bg-pink-50">
   <header class="bg-pink-300 p-4 flex items-center justify-between text-white">
-    <h1 class="text-2xl font-bold text-center flex-1">Cute Chat 💕</h1>
-    <button
-      id="clear-chat-btn"
-      class="ml-4 bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm"
-    >
+    <h1 class="text-2xl font-bold flex-1 text-center">Cute Chat 💕</h1>
+    <button id="clear-chat-btn"
+            class="ml-4 bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm">
       Clear All
     </button>
   </header>
@@ -26,22 +24,18 @@
   <div id="typing-indicator" class="px-4 text-gray-600 text-sm h-6"></div>
 
   <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
-    <input
-      id="chat-input"
-      class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
-      placeholder="Type your message…"
-      autocomplete="off"
-    />
-    <button
-      type="submit"
-      class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold"
-    >
+    <input id="chat-input"
+           class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
+           placeholder="Type your message…"
+           autocomplete="off" />
+    <button type="submit"
+            class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
       Send
     </button>
   </form>
 
   <script>
-    // 1) Initialize Firebase
+    // --- 1) Initialize Firebase ---
     const firebaseConfig = {
       apiKey: "AIzaSyA_LU2HJW9ppDRynAdDzoElD7B0h4YrC-M",
       authDomain: "chat-linh-tinh.firebaseapp.com",
@@ -55,7 +49,7 @@
     const db = firebase.firestore();
     const FieldValue = firebase.firestore.FieldValue;
 
-    // 2) Prompt for your name (only “Tún” or “Linh” allowed)
+    // --- 2) Prompt for name (only “Tún” or “Linh”) ---
     let user;
     while (true) {
       user = prompt("What is your name? (Only “Tún” or “Linh” allowed)");
@@ -63,16 +57,15 @@
       alert("Sorry, only Tún or Linh can chat here!");
     }
 
-    // 3) Ask for Notification permission
+    // --- 3) Ask Notification permission ---
     if ("Notification" in window) {
       Notification.requestPermission().then(p => console.log("Notif perm:", p));
     }
 
-    // 4) Prepare typing-status doc
+    // --- 4) Typing indicator setup ---
     const typingRef = db.collection("status").doc("typing");
     typingRef.set({ [user]: false }, { merge: true });
 
-    // 5) Typing indicator
     const chatInput = document.getElementById("chat-input");
     let typingTimeout;
     chatInput.addEventListener("input", () => {
@@ -87,7 +80,7 @@
         data[other] ? "Typing…" : "";
     });
 
-    // 6) Send message helper
+    // --- 5) Send & Clear helpers ---
     async function sendMessage(text) {
       await db.collection("messages").add({
         text,
@@ -96,8 +89,6 @@
         seenBy: []
       });
     }
-
-    // 7) Clear-all helper
     async function clearChat() {
       if (!confirm("Are you sure you want to delete every message?")) return;
       const snap = await db.collection("messages").get();
@@ -107,92 +98,96 @@
     }
     document.getElementById("clear-chat-btn").addEventListener("click", clearChat);
 
-    // 8) Snapshot listener: notifications + render + confetti
+    // --- 6) Snapshot listener with initialLoad guard ---
     const chatWindow = document.getElementById("chat-window");
+    let initialLoad = true;
+
     db.collection("messages")
       .orderBy("createdAt", "asc")
       .onSnapshot(snapshot => {
-        // a) Fire desktop notification & confetti for new messages from the other user
+        // On first load, just render history—no notifs or confetti
+        if (initialLoad) {
+          chatWindow.innerHTML = "";
+          snapshot.forEach(doc => renderBubble(doc));
+          chatWindow.scrollTop = chatWindow.scrollHeight;
+          initialLoad = false;
+          return;
+        }
+
+        // For subsequent updates: notifications & confetti
         snapshot.docChanges().forEach(change => {
           if (change.type === "added") {
             const { text, user: u } = change.doc.data();
-
-            // push notification
+            // desktop notification
             if (u !== user && Notification.permission === "granted") {
               new Notification(`${u} says:`, {
-                body: text.length > 50 ? text.slice(0, 47) + "…" : text
+                body: text.length > 50 ? text.slice(0,47) + "…" : text
               });
             }
             // confetti on keyword “love”
-            if (change.type === "added" && text.toLowerCase().includes("love")) {
+            if (text.toLowerCase().includes("love")) {
               confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
             }
           }
         });
 
-        // b) Render all messages
+        // Then re-render the full chat
         chatWindow.innerHTML = "";
-        snapshot.forEach(doc => {
-          const { text, user: u, createdAt, seenBy = [] } = doc.data();
-
-          // mark as seen
-          if (u !== user && !seenBy.includes(user)) {
-            doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
-          }
-
-          // date/time
-          const dateObj = createdAt ? createdAt.toDate() : new Date();
-          const dateString = dateObj.toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "2-digit"
-          });
-          const timeString = dateObj.toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit"
-          });
-          const dateTime = `${dateString} ${timeString}`;
-
-          // styling
-          const side = u === user ? "justify-end" : "justify-start";
-          const bg = u === user ? "bg-pink-200" : "bg-white shadow";
-          const other = user === "Tún" ? "Linh" : "Tún";
-          const seenIndicator =
-            u === user && seenBy.includes(other)
-              ? `<span class="text-xs text-blue-500 ml-1">✓</span>`
-              : "";
-
-          // bubble
-          const msgEl = document.createElement("div");
-          msgEl.className = `my-2 flex ${side}`;
-          msgEl.innerHTML = `
-            <div class="max-w-xs p-3 rounded-2xl ${bg}">
-              <div class="flex items-baseline justify-between">
-                <span class="text-sm font-medium">${u}</span>
-                <span class="text-xs text-gray-600 ml-2">${dateTime}</span>
-                ${seenIndicator}
-              </div>
-              <p class="mt-1">${text}</p>
-            </div>`;
-          chatWindow.appendChild(msgEl);
-        });
+        snapshot.forEach(doc => renderBubble(doc));
         chatWindow.scrollTop = chatWindow.scrollHeight;
       });
 
-    // 9) Form submit handler: send + confetti if you type “love”
-    document.getElementById("chat-form").addEventListener("submit", e => {
-      e.preventDefault();
-      const txt = chatInput.value.trim();
-      if (!txt) return;
-
-      sendMessage(txt);
-
-      // confetti on self‐sent “love”
-      if (txt.toLowerCase().includes("love")) {
-        confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
+    // --- 7) Render helper ---
+    function renderBubble(doc) {
+      const { text, user: u, createdAt, seenBy = [] } = doc.data();
+      // mark as seen
+      if (u !== user && !seenBy.includes(user)) {
+        doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
       }
+      // format date/time
+      const dateObj = createdAt ? createdAt.toDate() : new Date();
+      const dateString = dateObj.toLocaleDateString("en-GB", {
+        day: "2-digit", month: "2-digit"
+      });
+      const timeString = dateObj.toLocaleTimeString("en-GB", {
+        hour: "2-digit", minute: "2-digit"
+      });
+      const dateTime = `${dateString} ${timeString}`;
 
-      chatInput.value = "";
-    });
+      const side = u === user ? "justify-end" : "justify-start";
+      const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
+      const other = user === "Tún" ? "Linh" : "Tún";
+      const seenIndicator =
+        u === user && seenBy.includes(other)
+          ? `<span class="text-xs text-blue-500 ml-1">✓</span>` : "";
+
+      const msgEl = document.createElement("div");
+      msgEl.className = `my-2 flex ${side}`;
+      msgEl.innerHTML = `
+        <div class="max-w-xs p-3 rounded-2xl ${bg}">
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm font-medium">${u}</span>
+            <span class="text-xs text-gray-600 ml-2">${dateTime}</span>
+            ${seenIndicator}
+          </div>
+          <p class="mt-1">${text}</p>
+        </div>`;
+      chatWindow.appendChild(msgEl);
+    }
+
+    // --- 8) Form submit handler ---
+    document.getElementById("chat-form")
+      .addEventListener("submit", e => {
+        e.preventDefault();
+        const txt = chatInput.value.trim();
+        if (!txt) return;
+        sendMessage(txt);
+        // confetti on self‐sent “love”
+        if (txt.toLowerCase().includes("love")) {
+          confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
+        }
+        chatInput.value = "";
+      });
   </script>
 </body>
 </html>
