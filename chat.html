@@ -13,13 +13,11 @@
 </head>
 <body class="flex flex-col h-screen bg-pink-50">
   <header class="bg-pink-300 p-4 flex items-center justify-between text-white">
-    <h1 class="text-2xl font-bold text-center flex-1">Cute Chat 💕</h1>
+    <h1 class="text-2xl font-bold flex-1 text-center">Cute Chat 💕</h1>
     <div class="flex items-center space-x-2">
       <!-- Clear all messages -->
-      <button
-        id="clear-chat-btn"
-        class="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm"
-      >
+      <button id="clear-chat-btn"
+              class="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm">
         Clear All
       </button>
       <!-- Pattern selector -->
@@ -42,22 +40,18 @@
   <div id="typing-indicator" class="px-4 text-gray-600 text-sm h-6"></div>
 
   <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
-    <input
-      id="chat-input"
-      class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
-      placeholder="Type your message…"
-      autocomplete="off"
-    />
-    <button
-      type="submit"
-      class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold"
-    >
+    <input id="chat-input"
+           class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
+           placeholder="Type your message…"
+           autocomplete="off" />
+    <button type="submit"
+            class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
       Send
     </button>
   </form>
 
   <script>
-    // --- 1) Initialize Firebase ---
+    // 1) Initialize Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyA_LU2HJW9ppDRynAdDzoElD7B0h4YrC-M",
       authDomain: "chat-linh-tinh.firebaseapp.com",
@@ -71,22 +65,23 @@
     const db = firebase.firestore();
     const FieldValue = firebase.firestore.FieldValue;
 
-    // --- 2) Prompt for your name (only “Tún” or “Linh” allowed) ---
+    // 2) Prompt for your name (only “Tún” or “Linh” allowed)
     let user;
     while (true) {
-      user = prompt("Em iu tên gì zạ)");
+      user = prompt("What is your name? (Only “Tún” or “Linh” allowed)");
       if (user === "Tún" || user === "Linh") break;
-      alert("hem phải em iu gòi!");
+      alert("Sorry, only Tún or Linh can chat here!");
     }
 
-    // --- 3) Notification permission ---
+    // 3) Ask for Notification permission
     if ("Notification" in window) {
       Notification.requestPermission().then(p => console.log("Notif perm:", p));
     }
 
-    // --- 4) Typing indicator setup ---
+    // 4) Typing indicator setup
     const typingRef = db.collection("status").doc("typing");
     typingRef.set({ [user]: false }, { merge: true });
+
     const chatInput = document.getElementById("chat-input");
     let typingTimeout;
     chatInput.addEventListener("input", () => {
@@ -101,7 +96,7 @@
         data[other] ? "Typing…" : "";
     });
 
-    // --- 5) Send & Clear helpers ---
+    // 5) Send & Clear helpers
     async function sendMessage(text) {
       await db.collection("messages").add({
         text,
@@ -119,20 +114,32 @@
     }
     document.getElementById("clear-chat-btn").addEventListener("click", clearChat);
 
-    // --- 6) Background picker setup ---
-    const bgInput = document.getElementById("bg-input");
-    const uploadBgBtn = document.getElementById("upload-bg-btn");
-    const patternSelect = document.getElementById("pattern-select");
+    // 6) Global background persistence
+    const settingsRef = db.collection('settings').doc('chatBg');
 
     function applyBackground(url) {
       document.body.style.backgroundImage = url ? `url(${url})` : 'none';
       document.body.style.backgroundSize = url ? 'cover' : '';
       localStorage.setItem('chatBg', url || '');
+      settingsRef.set({ url: url || '' }, { merge: true });
     }
 
-    // Load saved background on startup
+    // Load local cached background immediately
     const savedBg = localStorage.getItem('chatBg');
     if (savedBg) applyBackground(savedBg);
+
+    // Listen for shared background changes
+    settingsRef.onSnapshot(doc => {
+      const data = doc.data();
+      if (data && data.url !== localStorage.getItem('chatBg')) {
+        applyBackground(data.url);
+      }
+    });
+
+    // Handle uploads and pattern selection
+    const bgInput = document.getElementById("bg-input");
+    const uploadBgBtn = document.getElementById("upload-bg-btn");
+    const patternSelect = document.getElementById("pattern-select");
 
     uploadBgBtn.addEventListener("click", () => bgInput.click());
     bgInput.addEventListener("change", e => {
@@ -141,16 +148,15 @@
       const reader = new FileReader();
       reader.onload = () => {
         applyBackground(reader.result);
-        patternSelect.value = ""; // reset pattern select
+        patternSelect.value = "";
       };
       reader.readAsDataURL(file);
     });
-
     patternSelect.addEventListener("change", () => {
       applyBackground(patternSelect.value);
     });
 
-    // --- 7) Snapshot listener with confetti & notifications ---
+    // 7) Snapshot listener with confetti & notifications
     const chatWindow = document.getElementById("chat-window");
     let initialLoad = true;
 
@@ -160,14 +166,14 @@
         doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
       }
       const dateObj = createdAt ? createdAt.toDate() : new Date();
-      const dateString = dateObj.toLocaleDateString("en-GB",{day:'2-digit',month:'2-digit'});
-      const timeString = dateObj.toLocaleTimeString("en-GB",{hour:'2-digit',minute:'2-digit'});
+      const dateString = dateObj.toLocaleDateString("en-GB", { day: '2-digit', month: '2-digit' });
+      const timeString = dateObj.toLocaleTimeString("en-GB", { hour: '2-digit', minute: '2-digit' });
       const dateTime = `${dateString} ${timeString}`;
 
-      const side = u===user ? "justify-end":"justify-start";
-      const bg   = u===user ? "bg-pink-200":"bg-white shadow";
-      const other= user==="Tún"?"Linh":"Tún";
-      const seenIndicator = (u===user && seenBy.includes(other))
+      const side = u === user ? "justify-end" : "justify-start";
+      const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
+      const other = user === "Tún" ? "Linh" : "Tún";
+      const seenIndicator = (u === user && seenBy.includes(other))
         ? `<span class="text-xs text-blue-500 ml-1">✓</span>` : "";
 
       const msgEl = document.createElement("div");
@@ -185,7 +191,7 @@
     }
 
     db.collection("messages")
-      .orderBy("createdAt","asc")
+      .orderBy("createdAt", "asc")
       .onSnapshot(snapshot => {
         if (initialLoad) {
           chatWindow.innerHTML = "";
@@ -198,13 +204,14 @@
         snapshot.docChanges().forEach(change => {
           if (change.type === "added") {
             const { text, user: u } = change.doc.data();
-            // Desktop notification
+
+            // desktop notification
             if (u !== user && Notification.permission === "granted") {
               new Notification(`${u} says:`, {
-                body: text.length > 50 ? text.slice(0,47)+"…" : text
+                body: text.length > 50 ? text.slice(0,47) + "…" : text
               });
             }
-            // Confetti on "love"
+            // confetti on keyword "love"
             if (text.toLowerCase().includes("love")) {
               confetti({ particleCount:100, spread:60, origin:{ y:0.6 } });
             }
@@ -216,7 +223,7 @@
         chatWindow.scrollTop = chatWindow.scrollHeight;
       });
 
-    // --- 8) Form submit + confetti on self-sent "love" ---
+    // 8) Form submit handler: send + confetti on self-sent "love"
     document.getElementById("chat-form")
       .addEventListener("submit", e => {
         e.preventDefault();
