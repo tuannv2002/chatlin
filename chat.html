@@ -10,65 +10,48 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
   <!-- Canvas-Confetti for the “love” bursts -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
-
-  <style>
-    /* Gallery behind everything */
-    #bg-gallery {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      grid-auto-rows: 150px;
-      gap: 4px;
-      z-index: 0;
-      overflow: hidden;
-    }
-    #bg-gallery img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    /* Bring chat UI above gallery */
-    #app-content { position: relative; z-index: 1; }
-  </style>
 </head>
-<body>
-  <!-- 1) Background gallery container -->
-  <div id="bg-gallery"></div>
-
-  <div id="app-content" class="flex flex-col h-screen bg-pink-50">
-    <header class="bg-pink-300 p-4 flex items-center justify-between text-white">
-      <h1 class="text-2xl font-bold flex-1 text-center">Cute Chat 💕</h1>
-      <div class="flex items-center space-x-2">
-        <button id="clear-chat-btn"
-                class="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm">
-          Clear All
-        </button>
-        <button id="upload-bg-btn"
-                class="bg-white text-pink-500 px-3 py-1 rounded-full text-sm hover:bg-pink-50">
-          Add Photo
-        </button>
-        <input type="file" id="bg-input" accept="image/*" class="hidden" />
-      </div>
-    </header>
-
-    <div id="chat-window" class="flex-1 overflow-y-auto p-4"></div>
-    <div id="typing-indicator" class="px-4 text-gray-600 text-sm h-6"></div>
-
-    <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
-      <input id="chat-input"
-             class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
-             placeholder="Type your message…"
-             autocomplete="off" />
-      <button type="submit"
-              class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
-        Send
+<body class="flex flex-col h-screen bg-pink-50">
+  <header class="bg-pink-300 p-4 flex items-center justify-between text-white">
+    <h1 class="text-2xl font-bold flex-1 text-center">Cute Chat 💕</h1>
+    <div class="flex items-center space-x-2">
+      <!-- Clear all messages -->
+      <button id="clear-chat-btn"
+              class="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-full text-sm">
+        Clear All
       </button>
-    </form>
-  </div>
+      <!-- Pattern selector -->
+      <select id="pattern-select"
+              class="bg-white text-pink-500 px-2 py-1 rounded-full text-sm focus:outline-none">
+        <option value="">Default</option>
+        <option value="https://www.toptal.com/designers/subtlepatterns/patterns/pw_maze_white.png">Maze</option>
+        <option value="https://www.toptal.com/designers/subtlepatterns/patterns/diagmonds.png">Diagmonds</option>
+      </select>
+      <!-- Upload custom background -->
+      <button id="upload-bg-btn"
+              class="bg-white text-pink-500 px-3 py-1 rounded-full text-sm hover:bg-pink-50">
+        Upload BG
+      </button>
+      <input type="file" id="bg-input" accept="image/*" class="hidden" />
+    </div>
+  </header>
+
+  <div id="chat-window" class="flex-1 overflow-y-auto p-4"></div>
+  <div id="typing-indicator" class="px-4 text-gray-600 text-sm h-6"></div>
+
+  <form id="chat-form" class="flex p-4 bg-white border-t border-pink-200">
+    <input id="chat-input"
+           class="flex-1 p-2 rounded-full border border-pink-300 focus:outline-none"
+           placeholder="Type your message…"
+           autocomplete="off" />
+    <button type="submit"
+            class="ml-2 px-4 rounded-full bg-pink-400 text-white font-semibold">
+      Send
+    </button>
+  </form>
 
   <script>
-    // --- 1) Initialize Firebase ---
+    // 1) Initialize Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyA_LU2HJW9ppDRynAdDzoElD7B0h4YrC-M",
       authDomain: "chat-linh-tinh.firebaseapp.com",
@@ -82,7 +65,7 @@
     const db = firebase.firestore();
     const FieldValue = firebase.firestore.FieldValue;
 
-    // --- 2) Prompt for your name (only “Tún” or “Linh” allowed) ---
+    // 2) Prompt for your name (only “Tún” or “Linh” allowed)
     let user;
     while (true) {
       user = prompt("What is your name? (Only “Tún” or “Linh” allowed)");
@@ -90,14 +73,15 @@
       alert("Sorry, only Tún or Linh can chat here!");
     }
 
-    // --- 3) Notification permission ---
+    // 3) Ask for Notification permission
     if ("Notification" in window) {
       Notification.requestPermission().then(p => console.log("Notif perm:", p));
     }
 
-    // --- 4) Typing indicator setup ---
+    // 4) Typing indicator setup
     const typingRef = db.collection("status").doc("typing");
     typingRef.set({ [user]: false }, { merge: true });
+
     const chatInput = document.getElementById("chat-input");
     let typingTimeout;
     chatInput.addEventListener("input", () => {
@@ -112,7 +96,7 @@
         data[other] ? "Typing…" : "";
     });
 
-    // --- 5) Send & Clear helpers ---
+    // 5) Send & Clear helpers
     async function sendMessage(text) {
       await db.collection("messages").add({
         text,
@@ -130,39 +114,49 @@
     }
     document.getElementById("clear-chat-btn").addEventListener("click", clearChat);
 
-    // --- 6) Gallery persistence ---
-    const settingsRef = db.collection('settings').doc('gallery');
-    const bgInput = document.getElementById("bg-input");
-    const uploadBgBtn = document.getElementById("upload-bg-btn");
-    const galleryEl = document.getElementById("bg-gallery");
+    // 6) Global background persistence
+    const settingsRef = db.collection('settings').doc('chatBg');
 
-    // Read & render gallery array from Firestore
+    function applyBackground(url) {
+      document.body.style.backgroundImage = url ? `url(${url})` : 'none';
+      document.body.style.backgroundSize = url ? 'cover' : '';
+      localStorage.setItem('chatBg', url || '');
+      settingsRef.set({ url: url || '' }, { merge: true });
+    }
+
+    // Load local cached background immediately
+    const savedBg = localStorage.getItem('chatBg');
+    if (savedBg) applyBackground(savedBg);
+
+    // Listen for shared background changes
     settingsRef.onSnapshot(doc => {
-      const data = doc.data() || {};
-      const urls = Array.isArray(data.urls) ? data.urls : [];
-      galleryEl.innerHTML = "";
-      urls.forEach(url => {
-        const img = document.createElement("img");
-        img.src = url;
-        galleryEl.appendChild(img);
-      });
+      const data = doc.data();
+      if (data && data.url !== localStorage.getItem('chatBg')) {
+        applyBackground(data.url);
+      }
     });
 
-    // When user picks a file, upload its DataURL into the shared Firestore array
+    // Handle uploads and pattern selection
+    const bgInput = document.getElementById("bg-input");
+    const uploadBgBtn = document.getElementById("upload-bg-btn");
+    const patternSelect = document.getElementById("pattern-select");
+
     uploadBgBtn.addEventListener("click", () => bgInput.click());
     bgInput.addEventListener("change", e => {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        settingsRef.set({
-          urls: FieldValue.arrayUnion(reader.result)
-        }, { merge: true });
+        applyBackground(reader.result);
+        patternSelect.value = "";
       };
       reader.readAsDataURL(file);
     });
+    patternSelect.addEventListener("change", () => {
+      applyBackground(patternSelect.value);
+    });
 
-    // --- 7) Chat listener with notifications & confetti ---
+    // 7) Snapshot listener with confetti & notifications
     const chatWindow = document.getElementById("chat-window");
     let initialLoad = true;
 
@@ -171,33 +165,33 @@
       if (u !== user && !seenBy.includes(user)) {
         doc.ref.update({ seenBy: FieldValue.arrayUnion(user) });
       }
-      const d = createdAt ? createdAt.toDate() : new Date();
-      const date = d.toLocaleDateString("en-GB",{day:'2-digit',month:'2-digit'});
-      const time = d.toLocaleTimeString("en-GB",{hour:'2-digit',minute:'2-digit'});
-      const dateTime = `${date} ${time}`;
+      const dateObj = createdAt ? createdAt.toDate() : new Date();
+      const dateString = dateObj.toLocaleDateString("en-GB", { day: '2-digit', month: '2-digit' });
+      const timeString = dateObj.toLocaleTimeString("en-GB", { hour: '2-digit', minute: '2-digit' });
+      const dateTime = `${dateString} ${timeString}`;
 
-      const side = u===user ? "justify-end" : "justify-start";
-      const bg   = u===user ? "bg-pink-200"   : "bg-white shadow";
-      const other= user==="Tún" ? "Linh"      : "Tún";
-      const seen = (u===user && seenBy.includes(other))
-                   ? `<span class="text-xs text-blue-500 ml-1">✓</span>` : "";
+      const side = u === user ? "justify-end" : "justify-start";
+      const bg   = u === user ? "bg-pink-200" : "bg-white shadow";
+      const other = user === "Tún" ? "Linh" : "Tún";
+      const seenIndicator = (u === user && seenBy.includes(other))
+        ? `<span class="text-xs text-blue-500 ml-1">✓</span>` : "";
 
-      const el = document.createElement("div");
-      el.className = `my-2 flex ${side}`;
-      el.innerHTML = `
+      const msgEl = document.createElement("div");
+      msgEl.className = `my-2 flex ${side}`;
+      msgEl.innerHTML = `
         <div class="max-w-xs p-3 rounded-2xl ${bg}">
           <div class="flex items-baseline justify-between">
             <span class="text-sm font-medium">${u}</span>
             <span class="text-xs text-gray-600 ml-2">${dateTime}</span>
-            ${seen}
+            ${seenIndicator}
           </div>
           <p class="mt-1">${text}</p>
         </div>`;
-      chatWindow.appendChild(el);
+      chatWindow.appendChild(msgEl);
     }
 
     db.collection("messages")
-      .orderBy("createdAt","asc")
+      .orderBy("createdAt", "asc")
       .onSnapshot(snapshot => {
         if (initialLoad) {
           chatWindow.innerHTML = "";
@@ -206,25 +200,30 @@
           initialLoad = false;
           return;
         }
+
         snapshot.docChanges().forEach(change => {
           if (change.type === "added") {
             const { text, user: u } = change.doc.data();
-            if (u !== user && Notification.permission==="granted") {
+
+            // desktop notification
+            if (u !== user && Notification.permission === "granted") {
               new Notification(`${u} says:`, {
-                body: text.length>50?text.slice(0,47)+"…":text
+                body: text.length > 50 ? text.slice(0,47) + "…" : text
               });
             }
+            // confetti on keyword "love"
             if (text.toLowerCase().includes("love")) {
-              confetti({ particleCount:100, spread:60, origin:{y:0.6} });
+              confetti({ particleCount:100, spread:60, origin:{ y:0.6 } });
             }
           }
         });
+
         chatWindow.innerHTML = "";
         snapshot.forEach(renderBubble);
         chatWindow.scrollTop = chatWindow.scrollHeight;
       });
 
-    // --- 8) Form submit + self “love” confetti ---
+    // 8) Form submit handler: send + confetti on self-sent "love"
     document.getElementById("chat-form")
       .addEventListener("submit", e => {
         e.preventDefault();
@@ -232,7 +231,7 @@
         if (!txt) return;
         sendMessage(txt);
         if (txt.toLowerCase().includes("love")) {
-          confetti({ particleCount:100, spread:60, origin:{y:0.6} });
+          confetti({ particleCount:100, spread:60, origin:{ y:0.6 } });
         }
         chatInput.value = "";
       });
